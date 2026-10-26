@@ -1,0 +1,378 @@
+[
+ {
+  "id": "S0a",
+  "name": "World facade, classic world copy, export guard",
+  "depends_on": [],
+  "owns_files": [
+   "src/world.js",
+   "src/world-grid.js",
+   "src/world-v2.js",
+   "2d.html",
+   "package.json",
+   "tools/check_exports.mjs"
+  ],
+  "task": "Read spec sections 7 and 8. (1) Copy today's src/world.js verbatim to src/world-grid.js. Add the World API v2 names that grid can answer now:\n- KIND='grid', MAP_VERSION=1, READY=true, PX_PER_M, BOUNDS, SEA_LEVEL=-1, PHYS=classic (spec \u00a710)\n- the kind codes SAND..ROCK\n- surfaceAt = tileAtPx\n- blockedCarPx and blockedFootPx = blockedPx\n- wallNormalPx = () => null\n- groundY = the H table moved from city.js:13 (keep identical values)\n- gripAt = GRASS ? {max:.55,lat:1} : {max:1,lat:1}\n- sightClear = blockedPx samples every 24 px\n- regionAt = () => 'classic'\n- mapImage() = makeMinimap(4) with .k = 4/64\n- deliveryDoors = non-place buildings with curb = door\n- benchViews and titleView (today's orbit)\n- the place extras: door.a = \u03c0/2, foot, curb, giver (today's giverSpot search, moved here), hangout, bay, filled in generate()\n- placeholder containers roads, anchors, routes, activities, landmarks (empty; filled in S1a).\nNever reassign an export. (2) Create src/world-v2.js as a stub: `export * from './world-grid.js'; export const READY = false; export const KIND = 'v2';`. (3) Rewrite src/world.js as the facade: namespace imports of both worlds, KIND selection (globalThis.KC_WORLD, ?map, localStorage kc-map, default 'grid'), fall back to grid if V2.READY is not true, and `export const X = W.X` for the union of every name either world exports. (4) In 2d.html add `<script>globalThis.KC_WORLD='grid'</script>` before the main.js module. (5) Add \"type\":\"module\" to package.json. (6) Write tools/check_exports.mjs (spec \u00a77): static import parsing; names used by shared modules must be defined in both worlds or allowlisted; src/map, src/sim and world*.js must not import three or src/3d. No consumer files change in this stage.",
+  "verify": "node tools/check_exports.mjs exits 0. index.html, index.html?map=2 (falls back) and 2d.html load with no console errors and look identical to before (screenshots at the title, the villa and the park). A pre-existing localStorage save loads with money, jars, story and garage intact. In the console, KC3 and the world facade report KIND 'grid'."
+ },
+ {
+  "id": "S0b",
+  "name": "3D runtime seams, city facade and bench",
+  "depends_on": [
+   "S0a"
+  ],
+  "owns_files": [
+   "src/3d/main3d.js",
+   "src/3d/combat.js",
+   "src/3d/city.js",
+   "src/3d/cityGrid.js",
+   "src/3d/cityV2.js",
+   "src/3d/bench.js"
+  ],
+  "task": "Spec \u00a77, \u00a78 and \u00a711. The grid look must not change at all. (1) Move today's src/3d/city.js builders verbatim into src/3d/cityGrid.js, and wrap its top-level texture creation (city.js:129-136) in a lazy mats() function. Export from it: occluderTop(xm,zm) (max of heightGrid and groundY) and nearestLamps(xm,zm,n,out) (today's sort from main3d:944). (2) Create the src/3d/cityV2.js stub: buildCity throws 'v2 renderer not built'; occluderTop and nearestLamps stubs. (3) Rewrite src/3d/city.js as a facade that picks by world.KIND and exports S, MAP, WORLD_M, surfaceY = world.groundY, occluderTop, nearestLamps, lampHeads, fountains, sea, mountains, yachts, clearTreesForCamera and buildCity, as live bindings assigned in buildCity. (4) main3d.js:\n- start and respawn from place.foot, with hero.heading = foot.a and cam.yaw = foot.a - \u03c0 (main3d:231, 430-435, 505-512)\n- chase and aim camera occlusion through occluderTop plus a groundY lift (replacing the heightGrid /4 and N code at 896-902 and 913-917)\n- shadow focus y = player ground (981)\n- car bubble at view.y + 2.4 (1018)\n- job arrow at groundY + 2 (1041)\n- updateLights uses nearestLamps\n- install bench.js.\n(5) combat.js: raycast ground test y < groundY and walls via occluderTop (94-101); enemy target at view.y + 0.9 (286); explosion at groundY + 0.8 (345); clearLine delegates to world.sightClear. (6) bench.js: KC3.teleport(name) from world.benchViews; KC3.bench(names) runs 180 frames per view and returns calls, tris, gpuMs (gfx.gpuMs median) and cpuMs; KC3.soak(sec). Record the grid baseline into tools/bench/baseline_grid.json (create it by pasting the console output).",
+  "verify": "node tools/check_exports.mjs passes. In the Browser pane, grid 3D screenshots at the 6 grid bench views match the pre-change ones. KC3.bench() is within \u00b12% of calls and tris and \u00b10.5 ms GPU of the baseline, which is committed in tools/bench/baseline_grid.json. Start, WASTED respawn and BUSTED respawn put Kimchi exactly door+30 px, door+40 px and door+40 px south (console assert). Bullets still hit walls and the ground; the camera still pulls in behind buildings."
+ },
+ {
+  "id": "S0c",
+  "name": "Gameplay seams: place contract in missions, police and entities",
+  "depends_on": [
+   "S0a"
+  ],
+  "owns_files": [
+   "src/3d/missions.js",
+   "src/3d/police.js",
+   "src/entities.js"
+  ],
+  "task": "Spec \u00a76.5 and \u00a78. Move consumers onto the place contract with identical behaviour on grid:\n- missions giverSpot returns place.giver (keep the search as a fallback)\n- goto and dropoff with car:true target place.curb\n- police updateSpray uses place.bay (police.js:200)\n- entities friends spawn at places[home].hangout (entities.js:124)\n- updatePlayer clamps to BOUNDS (entities.js:303)\n- respawnPed samples within BOUNDS.\nDo not touch the traffic AI yet. Keep every import name available in both worlds (run check_exports).",
+  "verify": "node tools/check_exports.mjs passes. On grid: the giver markers sit at the same coordinates as before (console dump compared with a recording taken before the change); friend spots are at door+(100,60); the K-Spray trigger and the First Day and Bad Rep missions play through in 3D; 2d.html plays with friends at their old spots."
+ },
+ {
+  "id": "S0d",
+  "name": "UI and save seams",
+  "depends_on": [
+   "S0a"
+  ],
+  "owns_files": [
+   "src/ui.js",
+   "src/3d/hud3d.js",
+   "src/save.js",
+   "src/state.js"
+  ],
+  "task": "Spec \u00a76.6 and \u00a78.\n- ui.js: minimap and big map use world.mapImage() and its .k instead of S/(N*T) (ui:451, 502). The big-map player arrow uses p.heading ?? (p.face<0?\u03c0:0). The jar count is jarSpots.filter(j => G.jars.has(j.id)).length, and the 'ALL n' text is read from data (ui:397).\n- hud3d.js: imgK = mapImage().k (hud3d:50); MM_RANGE stays 2600.\n- save.js and state.js: add mapVer (MAP_VERSION) and pr {traps:{},zones:{},jumps:{},events:{},found:{}} with defaults and load merging; add the G.seen.v2welcome flag.\nNo visual change on grid.",
+  "verify": "check_exports passes. The grid minimap and big map in 2D and 3D are pixel-identical apart from the 3D arrow now pointing along the heading. A save written by 2d.html keeps the pr and mapVer fields after a 3D session and vice versa (round-trip test in the console). Jar HUD text unchanged (n/25)."
+ },
+ {
+  "id": "S1a",
+  "name": "Road graph core (spline, RoadNet, lattice)",
+  "depends_on": [
+   "S0a"
+  ],
+  "owns_files": [
+   "src/map/spline.js",
+   "src/map/roadnet.js",
+   "src/map/gridroads.js",
+   "src/world-grid.js",
+   "tools/roadnet_test.mjs"
+  ],
+  "task": "Spec \u00a74.1, \u00a76.3 and \u00a77. Implement src/map/spline.js (the sampling rule exactly as \u00a74.1) and src/map/roadnet.js:\n- junction detection: snap 15 m, X detection, merge within 3 m, self-loops\n- profiles hook\n- lanes, connectors (cubic Bezier, handles at 1/3 of the gap), conflict sets\n- priority, yield, allway and signal control\n- sidewalk walks\n- a 32 m segment hash, A*, follow, randomLanePoint\n- one-way support (ring).\nsrc/map/gridroads.js expresses the 7x7 lattice (roadCenter(k) = k*896+64 px) as ROADS in metres. Then in world-grid.js, generate() fills roads = buildRoadNet(latticeRoads()), anchors (bandanaYard = blockCenter(0,2), stolenCarLot = blockCenter(4,3) with a=\u03c0/2, raceStart = RACE[0]+(-220,+32) with a=0) and routes.street_kings (the 9 RACE junctions as gates). tools/roadnet_test.mjs runs in node: it builds the lattice and the v2 ROADS from spec \u00a74.3 pasted as a fixture, and asserts the radius, crossing and T-snap results of \u00a74.3 and \u00a74.4 (21 Loop T stations \u00b13 m, 0 hwy X).",
+  "verify": "node tools/roadnet_test.mjs passes: lattice has 49 nodes and 84 edges, lanes at \u00b132 px; v2 fixture gives 21 Loop T's at the \u00a74.4 stations, minimum radii as in the \u00a74.3 table \u00b11 m, 0 unplanned crossings, an A* route from the home foot to the marina curb exists, and the AI lane graph is strongly connected. check_exports passes. The grid game is unchanged (no consumer uses roads yet)."
+ },
+ {
+  "id": "S1b",
+  "name": "Lane traffic, sidewalk peds and population on the classic grid",
+  "depends_on": [
+   "S1a",
+   "S0c"
+  ],
+  "owns_files": [
+   "src/sim/traffic.js",
+   "src/sim/peds.js",
+   "src/sim/population.js",
+   "src/entities.js"
+  ],
+  "task": "Spec \u00a79. Replace entities.updateAICar and the grid spawning with src/sim/traffic.js:\n- lane following, path look-ahead, IDM-lite, curvature speed\n- reservation, yield and ghost\n- momentum hand-off: vx/vy = speed*tangent\n- c.ai.speed in px/s is authoritative and honours external writes.\nSignals are coded but disabled. src/sim/peds.js: sidewalk paths (grid = block sidewalk rings plus corner crosswalks), continuous heading, re-snap after a flee. src/sim/population.js: grid world uses global mode (24 traffic, 46 peds, today's parked logic); v2 uses rings with the caps in \u00a79. entities.js: spawnWorld delegates to population; updateWorld calls traffic, peds and population; respawnPed moves to population; driveCar and moveCar stay classic (PHYS is used later). Keep every export name of entities.js. Add trafficStats() and expose it through KC3.soak (bench.js reads window.KCSTATS if present).",
+  "verify": "On grid in 3D and in 2d.html: traffic drives in lanes and turns on curved connectors; no AI pair is closer than 3 m outside connectors; a 10-minute KC3.soak reports at most 1% of cars stuck for more than 5 s, mean speed at least 6 m/s and 0 peds standing on ROAD after a flee; a carjack at speed keeps momentum; KC3.bench stays within \u00b13% of the baseline. node tools/check_exports.mjs passes."
+ },
+ {
+  "id": "S1c",
+  "name": "Police and mission navigation on the graph",
+  "depends_on": [
+   "S1a",
+   "S0c"
+  ],
+  "owns_files": [
+   "src/sim/nav.js",
+   "src/3d/police.js",
+   "src/3d/missions.js"
+  ],
+  "task": "Spec \u00a79 (police, missions).\n- src/sim/nav.js: roadWaypoint(c,tx,ty) with the same signature (cached A*, replan rules, pure pursuit), curvatureAhead, routeTo, predictPath.\n- police.js: re-export roadWaypoint from nav; steerTo o.curv braking; spawnCopCar uses randomLanePoint 220-420 m out of view; drive-away to a far node; roadblocks at 3+ stars; interceptors at 4-5 stars; evade uses world.sightClear.\n- missions.js: replace node(), blockCenter, RACE, RIVAL_SPOT, VAN_SPOT, node(rand*7) and the BLOCKS clamp with anchors, routes (race gates by segment crossing, oriented by tangent), randomLanePoint and BOUNDS. Deliveries use deliveryDoors with a route-length band and timer = route/18 m/s + 20 s (grid band 900-3000 px so it plays like today).",
+  "verify": "On grid 3D: 20 random 2-star cop spawns reach the player along streets within 60 s; the Street Kings rival passes every gate and finishes; the Kimchi Empire boss wanders and flees without sticking for more than 10 s; Hot Delivery timers are achievable; a roadblock appears at 3 stars. check_exports passes; 2d.html still loads."
+ },
+ {
+  "id": "S2a",
+  "name": "Map data and terrain (headless)",
+  "depends_on": [
+   "S0a"
+  ],
+  "owns_files": [
+   "src/map/mapdata.js",
+   "src/map/raster.js",
+   "src/map/terrain.js",
+   "tools/map_check.mjs"
+  ],
+  "task": "Spec \u00a71-\u00a76. Author src/map/mapdata.js exactly from the spec tables:\n- COAST, COAST_KINDS, WATER, TERRAIN features, FLATTEN, REGIONS\n- ROADS (all 44 roads with the \u00a74.3 control points, y pins, flags, the ring CCW one-way)\n- SIGNALS, PATHS, PLACES (F and a), PHOTO_SPOTS, JARS, ANCHORS, ROUTES, ACTIVITIES, LANDMARKS, VIEW_CORRIDORS, BENCH_VIEWS, TITLE_PATH, PHYS.\nImplement src/map/raster.js (codes, flags, LEGACY, CURB, GRIP and the rasterisers) and src/map/terrain.js (coast SDF, features, overrides, flatten, beach and cliff profiles, sea floor, solveProfiles, carve, pads, seaDepth, using the two-raster rule TERRAIN/GROUND). Start tools/map_check.mjs with the geometry and terrain invariants (radii, grades, cut/fill, crossings, deck-over-water) using spline.js from S1a once it lands (until then use a local copy and swap it).",
+  "verify": "node tools/map_check.mjs (terrain and road part) exits 0 with the \u00a74.3 measured values (\u00b11 m radius, \u00b10.3% grade), pass cut \u2264 12 m, other cut/fill \u2264 10 m, decks only over water, and writes tools/out/terrain.png (hillshade plus roads). Terrain build \u2264 150 ms in node."
+ },
+ {
+  "id": "S2b",
+  "name": "World v2 generator core",
+  "depends_on": [
+   "S2a",
+   "S1a"
+  ],
+  "owns_files": [
+   "src/world-v2.js",
+   "src/map/prefabs.js",
+   "src/map/lots.js",
+   "src/map/props.js",
+   "src/map/mapimage.js",
+   "tools/map_check.mjs"
+  ],
+  "task": "Spec \u00a75-\u00a77. Replace the world-v2.js stub with the real generate() pipeline (sync, per-step timing) that exports the full World API v2 with READY=true. src/map/prefabs.js: move the 14 world.js LAYOUT branches verbatim into local-frame prefabs. Add park_circle, fest_grounds, hangar_row and star_mansions, the transform rule of \u00a71, and the place extras of \u00a75.1, computed by the formulas (door, foot, curb, giver, hangout, bay, pier, garage, display, spots, plane). Create minimal lots.js, props.js and mapimage.js with the final signatures (lots returns only prefab buildings, props returns lamps every 35 m, mapimage draws land, roads and water) so S2c can replace their bodies. Extend tools/map_check.mjs with place, jar, photo, lane-connectivity, sightline (SL1-SL3 against GROUND/OCC), determinism and timing checks, and write tools/out/map_v2.png.",
+  "verify": "node tools/map_check.mjs exits 0. Every place matches the \u00a75.1 table within 0.5 m, garage 8, display 7, spots 3, all 25 jars and 15 photo spots walkable, SL1-SL3 pass, raster hash stable across two runs, generate \u2264 450 ms in node. index.html?map=2 is allowed to stop at the cityV2 stub error, while index.html (grid) and 2d.html are unaffected. The user reviews tools/out/map_v2.png before S4 starts."
+ },
+ {
+  "id": "S2c",
+  "name": "Frontage lots, props and map image",
+  "depends_on": [
+   "S2b"
+  ],
+  "owns_files": [
+   "src/map/lots.js",
+   "src/map/props.js",
+   "src/map/mapimage.js"
+  ],
+  "task": "Spec \u00a72, \u00a76.4, \u00a77 and \u00a711.\n- lots.js: walk both sides of every urban edge at its frontage line and place lots by region STYLE (deco, resort, tower, ktown, house, mansion, warehouse). Rejection runs on the SURF raster against roads, water, prefabs, junction zones (r_j + 6 m) and other buildings. Each lot gets a yaw toward its road, heights with view-corridor caps (\u00a73) and the Kimchi Tower landmark, door, curb and the deliver flag. RNG streams are seeded per edge and side. Cap 450 buildings.\n- props.js: everything in \u00a711.1 Props as data, plus guardrails and fences, chevrons by the advisory formula, gantries, danger signs and beach props.\n- mapimage.js: renderMap (1 px/m: region tints, hillshade, roads by class with the hwy wide and orange, footprints, water, labels) and farAlbedo (1024x896, no hillshade).",
+  "verify": "node tools/map_check.mjs passes, including no building overlap and building count \u2264 450. tools/out/map_v2.png shows the frontage. Ocean Drive hotels face east (yaw within \u00b110\u00b0 of 0). generate() stays \u2264 450 ms in node and in Chrome on the M1 (performance.measure)."
+ },
+ {
+  "id": "S3a",
+  "name": "Render infrastructure: Builder, chunks, buckets",
+  "depends_on": [
+   "S0b"
+  ],
+  "owns_files": [
+   "src/3d/geo.js",
+   "src/3d/chunks.js",
+   "src/3d/palms3d.js",
+   "src/3d/scatter3d.js"
+  ],
+  "task": "Spec \u00a77 and \u00a711.\n- geo.js: Builder.setMatrix (applied after UVs), growable Float32Array storage, ribbon(frames, profile, opts), build({indexed}). Keep box, quad, tri and geo unchanged.\n- chunks.js: the makeChunkManager API, with layer far distances, hysteresis, a shadow caster radius of 110 m, a lazy build queue (3 ms slices, prioritised by distance plus 3 s of camera velocity), an LRU of 36 cells, dispose on eviction and stats().\n- palms3d.js and scatter3d.js: bucket items into 64 m cells so update() scans only buckets within far; split shadow casting so only instances within 60 m cast (a separate caster InstancedMesh per kind). Add makeStreamScatter(group, pack, {capacity, gen(cellX,cellZ), far}).",
+  "verify": "Grid 3D is visually unchanged (screenshot diff at the bench views, allowing only far-scatter culling differences). KC3.bench GPU and CPU are at or below the baseline and calls are within +5%. A node test shows Builder output for an axis box is identical to the old output when setMatrix is null."
+ },
+ {
+  "id": "S3b",
+  "name": "Classic city on chunks and lamp buckets",
+  "depends_on": [
+   "S3a",
+   "S0b"
+  ],
+  "owns_files": [
+   "src/3d/cityGrid.js",
+   "src/3d/city.js"
+  ],
+  "task": "Spec \u00a711. Register cityGrid outputs with chunks.js: ground, buildings and street life split per 128 m cell, shadow casting only within 110 m, street life far 180 m. nearestLamps becomes a 64 m bucket query. city.js passes chunks.update through buildCity().update. This proves the scaling path on the classic map before v2 exists.",
+  "verify": "Grid screenshots unchanged at the bench views. KC3.bench shows calls and GPU at or below the baseline. The shadow pass contains only casters within 110 m (checked with renderer.info during the shadow render). A 15-minute soak shows a flat heap (\u00b120 MB)."
+ },
+ {
+  "id": "S3c",
+  "name": "View pools and car/ped LOD",
+  "depends_on": [
+   "S0b",
+   "S1b"
+  ],
+  "owns_files": [
+   "src/3d/main3d.js",
+   "src/3d/cars.js"
+  ],
+  "task": "Spec \u00a711.\n- main3d.js: pool car views by type (\u2264 40) and person rigs (\u2264 40) instead of creating and removing them; ped rig castShadow off beyond 40 m and hidden beyond 110 m; call renderer.compileAsync after buildCity and after car models load.\n- cars.js: car far LOD (beyond 70 m, one merged mesh with vertex colours, no wheel spin, no shadow), castShadow only inside the sun shadow box, recycleCarView(v,type,color).",
+  "verify": "Grid KC3.bench shows calls reduced by at least 15% versus the baseline at the downtown and park views, with GPU at or below the baseline. A 15-minute soak keeps carViews.size \u2264 cars + pool and the heap flat. No visible pop inside 60 m."
+ },
+ {
+  "id": "S4a",
+  "name": "v2 renderer skeleton: terrain, sea, sky, title",
+  "depends_on": [
+   "S2c",
+   "S3b",
+   "S3c"
+  ],
+  "owns_files": [
+   "src/3d/cityV2.js",
+   "src/3d/terrain3d.js",
+   "src/3d/coast3d.js",
+   "src/3d/sky.js",
+   "src/3d/main3d.js",
+   "src/3d/roads3d.js",
+   "src/3d/buildings3d.js",
+   "src/3d/props3d.js",
+   "src/3d/landmarks3d.js"
+  ],
+  "task": "Spec \u00a711.\n- Replace the cityV2 stub with the orchestrator: chunks, terrain3d (LOD0 splat and LOD1 albedo), coast3d (SEADEPTH sea shader, ponds, beach props along beach segments, marina pier and yachts from place.pier), and palms and stream scatter fed from world v2.\n- Create roads3d.js, buildings3d.js, props3d.js and landmarks3d.js as stubs with the exact \u00a77 signatures (they return nothing) so S4b, S5a and S5b can fill them without touching cityV2.\n- sky.js: per-world fog. v2 HIGH 0.00055 + 0.0006\u00b7golden + 0.0008\u00b7night; LOW linear 180-900; grid unchanged.\n- main3d.js: for v2, near 0.15 and far 2600 (LOW 1200); title camera follows world.titleView; shadow focus uses the ground. Grid untouched.",
+  "verify": "index.html?map=2 loads in \u2264 3 s, shows the whole county's terrain, sea and coast, flies the title path, and lets you walk and drive (roads not yet meshed: drive on the terrain). Grid (default) is unchanged. KC3.bench on the v2 views: GPU \u2264 5 ms at this stage. No terrain cracks at 50, 200 and 600 m (screenshots)."
+ },
+ {
+  "id": "S4b",
+  "name": "v2 roads, junctions, bridges, markings",
+  "depends_on": [
+   "S4a"
+  ],
+  "owns_files": [
+   "src/3d/roads3d.js"
+  ],
+  "task": "Spec \u00a74.5 and \u00a711.1 Roads. Ribbons per near tile from the RoadNet frames and class cross-sections; junction polygons with fillets; the paint mesh with distance fade; bridges (cable-stayed span with pylon and stays, viaducts, bascule houses, the Rickenbacker arch, marina pier); Jersey barriers and W-beam guardrails; stone walls on cuts over 3 m. Merge per 256 m tile into about 5 materials. Ribbons sit 0.20 m above TERRAIN with verges snapped.",
+  "verify": "?map=2: close-ups of 25 junctions (including all 5 ring entries and the X nodes) at 10, 50 and 200 m show no gaps or z-fighting; markings continuous across tile borders; Loop and causeway screenshots at 600 m show painted far roads with no flicker. KC3.bench calls \u2264 S4a + 40 and GPU \u2264 6.5 ms in every v2 view."
+ },
+ {
+  "id": "S5c",
+  "name": "Painted facade, shop and sign atlases per region",
+  "depends_on": [],
+  "owns_files": [
+   "tools/gen_city_textures.py",
+   "tools/build_city_textures.py",
+   "assets/tex/facade_ktown.jpg",
+   "assets/tex/facade_tower.jpg",
+   "assets/tex/facade_resort.jpg",
+   "assets/tex/facade_house.jpg",
+   "assets/tex/facade_warehouse.jpg",
+   "assets/tex/signs_ktown.jpg"
+  ],
+  "task": "Use the existing Orbio pipeline (tools/gen_city_textures.py and build_city_textures.py; see the memory note on Orbio image generation) to produce, per new region style (ktown, tower glass, resort, gables house, warehouse), a facade atlas plus its lit and rough maps (8x8 cells of 3 m x 3.2 m, matching decoFacade's window grid), a K-Town neon and blade-sign atlas, and 2 new shop-front rows. Keep the cartoon-pastel art direction of the current assets/tex/facade.jpg. Deliver JPGs at 2048 px or less with the same atlas layouts so buildings3d can map them by region.",
+  "verify": "The new files exist and open; each atlas has the documented cell layout; a contact sheet shows no copy of the existing deco facade and covers 4 or more variants per style. Total added texture size \u2264 12 MB."
+ },
+ {
+  "id": "S5a",
+  "name": "v2 buildings: shells and detail cells",
+  "depends_on": [
+   "S4a",
+   "S2c"
+  ],
+  "owns_files": [
+   "src/3d/buildings3d.js",
+   "src/3d/textures.js"
+  ],
+  "task": "Spec \u00a76.4 and \u00a711.1 Buildings.\n- Shells per 256 m tile, always resident.\n- Detail per 128 m cell through chunks.lazy, built in local frames with Builder.setMatrix, reusing today's decoDetails, villa, luxShop, door, gableRoof and hipRoof logic (moved, not rewritten) and the prefab place buildings (mart, dealer and so on) with their signs.\n- Region styles map to the S5c atlases (textures.js gains loaders and falls back to decoFacade if a JPG is missing).\n- The Kimchi Tower shell is included; its crown belongs to landmarks.\n- Building tops feed OCC (already done by the generator).",
+  "verify": "?map=2: per-region screenshots (K-Town, downtown, Ocean Drive, Gables, Collins, Port) reviewed; facades aligned on rotated buildings; Ocean Drive hotels face the beach. A 50 m/s Loop lap shows no shell-to-empty pops and build slices \u2264 3 ms (performance marks). LRU \u2264 36 cells. KC3.bench \u2264 330 calls and GPU \u2264 7.5 ms in every v2 view."
+ },
+ {
+  "id": "S5b",
+  "name": "v2 props and landmarks",
+  "depends_on": [
+   "S4a",
+   "S2c"
+  ],
+  "owns_files": [
+   "src/3d/props3d.js",
+   "src/3d/landmarks3d.js"
+  ],
+  "task": "Spec \u00a75.7 and \u00a711.1 Props.\n- props3d: instanced lamps with light pools at groundY, KayKit traffic lights at signal nodes (lens colours from roads.signalAt), the sign atlas (chevrons, gantries, danger signs, speed-trap posts), billboards, furniture per cell, nearestLamps buckets.\n- landmarks3d: Kimchi Tower crown LEDs, KIMCHI letters, causeway pylon and stays, lighthouse beam, Fest arch, stage, rotating Ferris wheel, cranes, control tower, K-Town gate, Bayfront fountain, Glades tower, Rickenbacker arch, curved resort, and the jet merged into 4 meshes. Beacon materials use fog:false.",
+  "verify": "?map=2: the tower crown, letters and pylon read from the villa terrace at 1.0-1.4 km in daylight (screenshot); SL1 crest screenshot shows the tower and pylon in frame; the night view shows the lit landmarks; lamp point lights follow the nearest lamps. KC3.bench \u2264 360 calls and GPU \u2264 8 ms in every v2 view."
+ },
+ {
+  "id": "S6a",
+  "name": "Driving physics and v2 population",
+  "depends_on": [
+   "S1b",
+   "S2b"
+  ],
+  "owns_files": [
+   "src/entities.js",
+   "src/sim/population.js"
+  ],
+  "task": "Spec \u00a79 and \u00a710.\n- entities.js: implement the PHYS-gated physics (gripAt table, gripG yaw cap with a handbrake factor, slope term, airtime c.gy/c.vh/c.air, wall-normal slide with substeps and normal-only damage, push-out instead of angle revert). The classic PHYS must keep today's behaviour bit-for-bit.\n- population.js: the v2 rings, region densities, class weights, caps per tier, parked materialisation.\n- Enable signals at the \u00a74.4 candidate nodes and run the soak; leave them disabled if the soak fails.",
+  "verify": "Grid: 2d.html and grid 3D driving traces (scripted inputs for 20 s from the villa) match the pre-change positions within 1 px. v2: sliding along the causeway Jersey barrier at 50 m/s neither sticks nor wrecks the car (hp loss \u2264 10); the 4 jumps give 0.5-1.5 s airtime at 30-45 m/s; the Bolide holds the Indian Creek Bend at \u2264 170 km/h but not above; a 10-minute v2 soak meets the S1b metrics with population at its caps."
+ },
+ {
+  "id": "S6b",
+  "name": "Cars on hills and the camera on terrain",
+  "depends_on": [
+   "S4a",
+   "S3c",
+   "S6a"
+  ],
+  "owns_files": [
+   "src/3d/cars.js",
+   "src/3d/main3d.js"
+  ],
+  "task": "Spec \u00a710 and \u00a711.\n- cars.js syncCar: groundFn sampled at the 4 wheel contacts gives pitch and roll under the existing acceleration roll and pitch; use c.gy and c.air for airtime with a landing squash; tilt the headlight pool to the slope.\n- main3d.js: the chase and aim cameras pull in, then lift, when TERRAIN or OCC blocks; hero ground smoothing tuned for slopes (lower lag on continuous ground); spray splash fx on SHALLOW.",
+  "verify": "v2: driving the switchbacks, Crest Road and the causeway, wheel ground error stays \u2264 5 cm (KC3 metric); the camera never enters terrain on 3 scripted hill runs; airtime looks continuous. Grid visuals unchanged."
+ },
+ {
+  "id": "S7a",
+  "name": "Missions, police and photo content on v2",
+  "depends_on": [
+   "S1c",
+   "S2b",
+   "S4b",
+   "S5a"
+  ],
+  "owns_files": [
+   "src/3d/missions.js",
+   "src/3d/police.js",
+   "src/3d/lifestyle.js",
+   "src/data.js"
+  ],
+  "task": "Spec \u00a75 and \u00a79.\n- Retarget the 7 missions to the v2 places, anchors and routes:\n  - First Day: villa, pick up Mochi at Seoul Circle, drop off at Maison K on Lincoln Road.\n  - Street Kings: bay_loop, one Kimchi Loop lap.\n  - Bad Rep: the airboat yard in the Glades, then lose the cops via K-Spray.\n  - Grand Theft Cavallo: the Star Island motor court, K-Spray, then Kimchi Motors at Fest.\n  - Yuna's Big Day: Alhambra Circle to the Yacht Club at South Pointe.\n  - Kimchi Empire: boss on hwy/blvd/coast.\n- Rewrite the dialogue for the new places (missions.js and FRIENDS lines in data.js).\n- Retune timers and radii; race rival with rubber-banding.\n- lifestyle.js: captions for the 8 new photo ids, plus the look and time bonus.\n- Police radii and heat retune for v2.",
+  "verify": "On ?map=2, all 7 missions are completable from a fresh save (scripted where possible, plus one manual run). The rival laps in 95-115 s. 10 deliveries succeed at 70% of the Ursa's top speed with at least 10 s to spare. Losing 2 stars via K-Spray or the Glades takes 30-90 s. Grid missions still pass (S1c checks)."
+ },
+ {
+  "id": "S7b",
+  "name": "Minimap, big map, GPS, markers, save fields",
+  "depends_on": [
+   "S0d",
+   "S2c"
+  ],
+  "owns_files": [
+   "src/ui.js",
+   "src/3d/hud3d.js",
+   "src/3d/fx.js",
+   "src/save.js",
+   "src/state.js"
+  ],
+  "task": "Spec \u00a76.6 and \u00a711.\n- hud3d: speed-scaled minimap range (2600 to 7200 px), GPS line along roads.route to the job or mission target (recomputed at most once per second), police search circle, region-name popup.\n- ui: vector big map from mapImage with pan, zoom (0.5-4x), legend, region labels, givers, photo spots and seen jars, GPS line, and a hook for S8's onBigMapClick.\n- fx: mark pools 12 photo and 12 giver, distance sorted; jars set G.seen['jar'+id] within 40 m in 3D; markers at groundY.\n- save and state: the pr field round-trip and the v2welcome toast flag.",
+  "verify": "Grid 2D and 3D maps look as before (vector-wrapped raster). On v2: the minimap stays legible at 50 m/s; the GPS line follows roads to the job; the big map pans and zooms smoothly and stays under 2 ms per redraw; spotted jars appear; a v1 save loads with jars, posted, owned, paint and story intact and keeps them after a 2D autosave."
+ },
+ {
+  "id": "S8",
+  "name": "Forza layer: activities, events, fast travel",
+  "depends_on": [
+   "S7a",
+   "S7b",
+   "S6b"
+  ],
+  "owns_files": [
+   "src/3d/activities.js",
+   "src/3d/main3d.js",
+   "src/ui.js"
+  ],
+  "task": "Spec \u00a75.5 and \u00a75.6. activities.js:\n- speed traps (best km/h), average-speed zones, drift scoring (slip angle \u00d7 speed over the zone), jumps (airtime and distance from c.air)\n- Fest event board events (bay_loop, hillclimb, deco_sprint, glades_scramble, runway_drag, key_coastal), with gates and a timer\n- discovery of the hubs and fast travel from the big map (free between discovered hubs unless the user chose paid)\n- its own small HUD DOM, and persistence in G.pr.\nmain3d: call updateActivities(dt) and merge activityMarks() into the fx marks. ui: forward big-map clicks to onBigMapClick.",
+  "verify": "Each activity triggers, scores and persists across reload; a 2D session preserves G.pr; fast travel works only to discovered hubs; KC3.bench unchanged (\u00b12%)."
+ },
+ {
+  "id": "S9",
+  "name": "Perf hardening and default flip",
+  "depends_on": [
+   "S8",
+   "S5b",
+   "S4b"
+  ],
+  "owns_files": [
+   "src/world.js",
+   "index.html",
+   "README.md",
+   "src/3d/chunks.js",
+   "src/3d/terrain3d.js",
+   "src/3d/sky.js"
+  ],
+  "task": "Spec \u00a711.2.\n- Tune the LOD radii, fog, shadow caster radius, detail radius, Low-tier settings and population caps until the M1 bench meets every budget in every v2 view on Medium, with auto-quality settling on Medium or better.\n- Only if generate exceeds 450 ms, add a module Worker with transferables and a sync fallback.\n- Flip the world.js DEFAULT to 'v2'; ?map=1 stays the classic 3D for one release.\n- index.html: add a small 'classic map' link next to the 2D link.\n- README map section. One-time toast via G.seen.v2welcome.",
+  "verify": "In the Browser pane, the KC3.bench report saved to tools/bench/v2_final.json shows every v2 view at GPU \u2264 8.0 ms, calls \u2264 380, tris \u2264 1.2M. A 10-minute benchmark drive has p95 frame time < 16.7 ms on Medium; the Low tier holds \u2265 30 fps; load \u2264 3 s; heap flat for 15 minutes. check_exports and map_check pass; 2d.html is unaffected; an old save plays through on v2."
+ }
+]

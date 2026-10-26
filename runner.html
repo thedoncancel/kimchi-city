@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Kimchi Run</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B6%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root { --bg: #b29370; --ink: #1b1512; --cream: #f6ead8; --red: #d6402b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; overflow: hidden;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  #wrap { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud { position: absolute; top: 16px; left: 16px; right: 16px; display: flex;
+    justify-content: space-between; font-weight: 800; font-size: 22px; pointer-events: none; }
+  .hud small { display: block; font-size: 12px; opacity: .65; letter-spacing: .08em; text-transform: uppercase; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; text-align: center; padding: 16px; pointer-events: none; }
+  .overlay h1 { margin: 0; font-size: clamp(40px, 9vw, 84px); line-height: .95; letter-spacing: -.02em; }
+  .overlay h1 span { color: var(--red); }
+  .overlay p { margin: 0; font-size: 18px; font-weight: 600; }
+  .pill { background: var(--ink); color: var(--cream); padding: 10px 20px; border-radius: 999px;
+    font-weight: 800; animation: pulse 1.2s ease-in-out infinite; }
+  .handle { opacity: .7; font-size: 14px; }
+  .hidden { display: none; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <div><small>Score</small><span id="score">0</span></div>
+    <div style="text-align:right"><small>Best</small><span id="best">0</span></div>
+  </div>
+  <div class="overlay" id="title">
+    <h1>KIMCHI <span>RUN</span></h1>
+    <p>Jump the cones. Grab the kimchi jars.</p>
+    <div class="pill">Press Space or tap to start</div>
+    <div class="handle">@kimchi1x</div>
+  </div>
+  <div class="overlay hidden" id="over">
+    <h1>OUCH!</h1>
+    <p id="final">Score 0</p>
+    <div class="pill">Space / tap to try again</div>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const $score = document.getElementById('score');
+const $best = document.getElementById('best');
+const $title = document.getElementById('title');
+const $over = document.getElementById('over');
+const $final = document.getElementById('final');
+
+const sprite = new Image();
+sprite.src = 'assets/kimchi.png';
+
+let W, H, DPR, groundY, scale;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  scale = Math.min(1, H / 700, W / 500);
+  groundY = H * 0.78;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let best = 0;
+try { best = Number(localStorage.getItem('kimchi-best')) || 0; } catch (e) {}
+$best.textContent = best;
+
+const GRAVITY = 2600, JUMP = 1050;
+let state = 'title';
+let player, obstacles, jars, particles, speed, score, spawnT, jarT, dist, t;
+
+function reset() {
+  const h = 170 * scale;
+  player = { x: Math.max(60, W * 0.15), y: 0, vy: 0, h, w: h * 0.51, onGround: true, jumps: 0, squash: 0 };
+  obstacles = []; jars = []; particles = [];
+  speed = 420; score = 0; spawnT = 1.2; jarT = 0.8; dist = 0; t = 0;
+  $score.textContent = 0;
+}
+reset();
+
+function jump() {
+  if (state !== 'play') { start(); return; }
+  if (player.jumps < 2) {
+    player.vy = -JUMP * (player.jumps ? 0.85 : 1) * Math.sqrt(scale);
+    player.jumps++; player.onGround = false; player.squash = -0.18;
+    puff(player.x + player.w / 2, groundY - player.y, 6);
+  }
+}
+function start() {
+  reset(); state = 'play';
+  $title.classList.add('hidden'); $over.classList.add('hidden');
+}
+function gameOver() {
+  state = 'over';
+  if (score > best) { best = score; try { localStorage.setItem('kimchi-best', best); } catch (e) {} }
+  $best.textContent = best;
+  $final.textContent = `Score ${score}` + (score === best && score > 0 ? ' — new best!' : '');
+  setTimeout(() => { if (state === 'over') $over.classList.remove('hidden'); }, 250);
+  overAt = performance.now();
+}
+let overAt = 0;
+
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+    e.preventDefault();
+    if (state === 'over' && performance.now() - overAt < 400) return;
+    jump();
+  }
+});
+canvas.addEventListener('pointerdown', () => {
+  if (state === 'over' && performance.now() - overAt < 400) return;
+  jump();
+});
+document.querySelectorAll('.overlay').forEach(o => o.style.pointerEvents = 'none');
+document.getElementById('wrap').addEventListener('pointerdown', e => { if (e.target !== canvas) jump(); });
+
+function puff(x, y, n, color = 'rgba(246,234,216,.9)') {
+  for (let i = 0; i < n; i++) particles.push({
+    x, y, vx: (Math.random() - .5) * 220, vy: -Math.random() * 160, life: .5, max: .5, r: 3 + Math.random() * 4, color
+  });
+}
+
+function spawnObstacle() {
+  const tall = Math.random() < 0.3;
+  const h = (tall ? 70 : 46) * scale;
+  const w = (tall ? 40 : 34) * scale;
+  obstacles.push({ x: W + 20, w, h, kind: 'cone' });
+  if (speed > 600 && Math.random() < 0.25)
+    obstacles.push({ x: W + 20 + w + 26 * scale, w, h: 46 * scale, kind: 'cone' });
+}
+function spawnJar() {
+  const high = Math.random() < 0.5;
+  jars.push({ x: W + 20, y: groundY - (high ? 210 : 60) * scale, r: 18 * scale, bob: Math.random() * 6 });
+}
+
+function update(dt) {
+  t += dt;
+  // background scroll keeps going on title screen
+  dist += (state === 'play' ? speed : 140) * dt;
+  for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.life -= dt; }
+  particles = particles.filter(p => p.life > 0);
+  if (state !== 'play') return;
+
+  speed = Math.min(1100, speed + 12 * dt);
+
+  // player physics (y is height above ground)
+  player.vy += GRAVITY * dt;
+  player.y -= player.vy * dt;
+  if (player.y <= 0) {
+    if (!player.onGround) { player.squash = 0.15; puff(player.x + player.w / 2, groundY, 5); }
+    player.y = 0; player.vy = 0; player.onGround = true; player.jumps = 0;
+  }
+  player.squash *= Math.pow(0.0005, dt);
+
+  spawnT -= dt; jarT -= dt;
+  if (spawnT <= 0) { spawnObstacle(); spawnT = (0.9 + Math.random() * 0.9) * (520 / speed) + 0.35; }
+  if (jarT <= 0) { spawnJar(); jarT = 1.4 + Math.random() * 1.6; }
+
+  for (const o of obstacles) o.x -= speed * dt;
+  for (const j of jars) j.x -= speed * dt;
+  obstacles = obstacles.filter(o => o.x + o.w > -50);
+  jars = jars.filter(j => j.x > -50 && !j.got);
+
+  // hitbox: a bit smaller than sprite so near misses feel fair
+  const px = player.x + player.w * 0.22, pw = player.w * 0.56;
+  const py = groundY - player.y - player.h * 0.92, ph = player.h * 0.9;
+  for (const o of obstacles) {
+    const ox = o.x + o.w * 0.2, ow = o.w * 0.6, oy = groundY - o.h * 0.9;
+    if (px < ox + ow && px + pw > ox && py + ph > oy) {
+      puff(player.x + player.w / 2, py + ph / 2, 18, 'rgba(214,64,43,.9)');
+      gameOver(); return;
+    }
+    if (!o.passed && o.x + o.w < player.x) { o.passed = true; addScore(1); }
+  }
+  for (const j of jars) {
+    const jy = j.y + Math.sin(t * 4 + j.bob) * 6 * scale;
+    const cx = Math.max(px, Math.min(j.x, px + pw)), cy = Math.max(py, Math.min(jy, py + ph));
+    if ((j.x - cx) ** 2 + (jy - cy) ** 2 < j.r * j.r) {
+      j.got = true; addScore(5); puff(j.x, jy, 12, 'rgba(214,64,43,.85)');
+    }
+  }
+}
+function addScore(n) { score += n; $score.textContent = score; }
+
+// ---------- drawing ----------
+function drawBackground() {
+  const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+  sky.addColorStop(0, '#c8ad89'); sky.addColorStop(1, '#b29370');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, groundY);
+
+  // sun
+  ctx.fillStyle = 'rgba(246,234,216,.55)';
+  ctx.beginPath(); ctx.arc(W * 0.78, H * 0.22, 60 * scale + 20, 0, Math.PI * 2); ctx.fill();
+
+  // far skyline (parallax)
+  drawSkyline(dist * 0.15, '#a3835f', 0.55, 7);
+  drawSkyline(dist * 0.35, '#8f7050', 0.35, 13);
+
+  // ground
+  ctx.fillStyle = '#3a2e26'; ctx.fillRect(0, groundY, W, H - groundY);
+  ctx.fillStyle = '#4a3c31'; ctx.fillRect(0, groundY, W, 8 * scale + 2);
+  // lane dashes
+  ctx.fillStyle = 'rgba(246,234,216,.5)';
+  const gap = 90, off = dist % gap;
+  for (let x = -off; x < W; x += gap) ctx.fillRect(x, groundY + (H - groundY) * 0.45, 44, 5);
+}
+function drawSkyline(offset, color, hFrac, seed) {
+  ctx.fillStyle = color;
+  const bw = 70, start = Math.floor(offset / bw);
+  for (let i = start; i < start + W / bw + 2; i++) {
+    const r = Math.abs(Math.sin(i * 12.9898 + seed) * 43758.5453) % 1;
+    const bh = groundY * hFrac * (0.35 + r * 0.65);
+    const x = i * bw - offset;
+    ctx.fillRect(x, groundY - bh, bw - 6, bh);
+    if (r > 0.5) ctx.fillRect(x + bw * 0.4, groundY - bh - 18, 4, 18); // antenna
+  }
+}
+function drawCone(o) {
+  const x = o.x, b = groundY, h = o.h, w = o.w;
+  ctx.fillStyle = '#2a211b'; ctx.fillRect(x - 4, b - 6 * scale, w + 8, 6 * scale);
+  ctx.fillStyle = '#e8622c';
+  ctx.beginPath(); ctx.moveTo(x + w * 0.1, b - 5 * scale); ctx.lineTo(x + w * 0.42, b - h);
+  ctx.lineTo(x + w * 0.58, b - h); ctx.lineTo(x + w * 0.9, b - 5 * scale); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#f6ead8';
+  const s1 = b - h * 0.62, s2 = b - h * 0.42;
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.31, s1); ctx.lineTo(x + w * 0.69, s1);
+  ctx.lineTo(x + w * 0.75, s2); ctx.lineTo(x + w * 0.25, s2); ctx.closePath(); ctx.fill();
+}
+function drawJar(j) {
+  const y = j.y + Math.sin(t * 4 + j.bob) * 6 * scale, r = j.r;
+  ctx.save(); ctx.translate(j.x, y);
+  ctx.fillStyle = 'rgba(246,234,216,.25)'; ctx.beginPath(); ctx.arc(0, 0, r * 1.6, 0, Math.PI * 2); ctx.fill();
+  // glass jar with red kimchi
+  ctx.fillStyle = '#d6402b'; roundRect(-r * 0.8, -r * 0.6, r * 1.6, r * 1.5, r * 0.35); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; roundRect(-r * 0.55, -r * 0.4, r * 0.25, r * 1.0, r * 0.12); ctx.fill();
+  ctx.fillStyle = '#1b1512'; roundRect(-r * 0.7, -r * 0.95, r * 1.4, r * 0.42, r * 0.12); ctx.fill();
+  ctx.fillStyle = '#f6ead8'; roundRect(-r * 0.45, -r * 0.05, r * 0.9, r * 0.45, r * 0.1); ctx.fill();
+  ctx.restore();
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawPlayer() {
+  const p = player;
+  const feetY = groundY - p.y;
+  // shadow
+  const sh = Math.max(0.3, 1 - p.y / 300);
+  ctx.fillStyle = `rgba(0,0,0,${0.25 * sh})`;
+  ctx.beginPath(); ctx.ellipse(p.x + p.w / 2, groundY + 3, p.w * 0.45 * sh, 7 * scale, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (!sprite.complete || !sprite.naturalWidth) return;
+  // little run bob + squash/stretch since we only have one pose
+  const running = state === 'play' && p.onGround;
+  const bob = running ? Math.abs(Math.sin(t * 16)) * 5 * scale : (state === 'title' ? Math.sin(t * 3) * 3 : 0);
+  const tilt = state === 'play' ? (p.onGround ? Math.sin(t * 16) * 0.035 : -0.08) : 0;
+  const sx = 1 + p.squash, sy = 1 - p.squash;
+  ctx.save();
+  ctx.translate(p.x + p.w / 2, feetY - bob);
+  ctx.rotate(state === 'over' ? 0.35 : tilt);
+  ctx.scale(sx, sy);
+  ctx.drawImage(sprite, -p.w / 2, -p.h, p.w, p.h);
+  ctx.restore();
+}
+
+function draw() {
+  drawBackground();
+  for (const j of jars) drawJar(j);
+  for (const o of obstacles) drawCone(o);
+  drawPlayer();
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / p.max; ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.033, (now - last) / 1000); last = now;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

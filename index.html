@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Kimchi City</title>
+<meta name="description" content="A mini open-world 3D game starring Kimchi. Supercars, a hillside villa, private jets, story missions and car chases across Kimchi Key, a sunny island county. Free in your browser.">
+<meta name="theme-color" content="#0c0c0e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B6%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kimchi City">
+<meta property="og:title" content="Kimchi City — the luxury life">
+<meta property="og:description" content="A mini open-world game starring Kimchi: supercars, a villa, private jets, story missions and car chases across an island city. Play free in your browser.">
+<meta property="og:url" content="https://kimchi-city.vercel.app/">
+<meta property="og:image" content="https://kimchi-city.vercel.app/assets/og-card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Kimchi in a denim jacket beside the gold title Kimchi City, with his villa and pool at night behind him">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@kimchi1x">
+<meta name="twitter:title" content="Kimchi City — the luxury life">
+<meta name="twitter:description" content="A mini open-world game starring Kimchi: supercars, a villa, private jets, story missions and car chases. Play free in your browser.">
+<meta name="twitter:image" content="https://kimchi-city.vercel.app/assets/og-card.jpg">
+<link rel="stylesheet" href="src/style.css">
+<link rel="stylesheet" href="src/style3d.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+</head>
+<body class="three">
+<canvas id="game"></canvas>
+<div id="labels"></div>
+<div id="jobArrow" style="display:none"></div>
+
+<div id="hud" class="hidden">
+  <div class="stats">
+    <div class="money" id="money">$0</div>
+    <div class="followers"><span>👥</span> <b id="followers">197.5K</b> followers</div>
+    <div class="clock"><span id="clockIcon">☀️</span> <span id="clock">9:00 AM</span> · Day <span id="day">1</span></div>
+    <div class="energy"><span>⚡</span><div class="bar"><i id="energyBar"></i></div></div>
+    <div class="energy hp"><span>❤️</span><div class="bar"><i id="healthBar"></i></div></div>
+    <div class="energy armor hidden" id="armorRow"><span>🛡️</span><div class="bar"><i id="armorBar"></i></div></div>
+  </div>
+  <canvas id="minimap" width="380" height="380"></canvas>
+  <div id="wanted" aria-label="Wanted level"><i>★</i><i>★</i><i>★</i><i>★</i><i>★</i></div>
+  <div id="weapon"><span id="wIcon">👊</span><div><b id="wName">Fists</b><small id="wAmmo"></small></div></div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="subs" class="hidden"></div>
+  <div id="radioName"></div>
+  <div id="objective"></div>
+  <div id="prompt" class="hidden"></div>
+  <div id="toasts"></div>
+  <div id="actLive" class="hidden"></div>
+  <div id="actPop"></div>
+  <div id="speedo" class="hidden"><b id="kmh">0</b><span>km/h</span><small id="carName"></small></div>
+  <div id="help">WASD move · Shift run · Space jump/brake · E use · P post a pic · click: grab mouse · RMB aim · LMB shoot · 1–4 weapons · R reload/radio · C cam · M map</div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tbtns">
+    <button data-k="KeyE" class="big">E</button>
+    <button data-hold="run" aria-label="Run, jump or handbrake">⚡</button>
+    <button data-k="KeyH" aria-label="Horn">📯</button>
+    <button data-k="KeyI" aria-label="Bag">🎒</button>
+    <button data-k="KeyM" aria-label="Map">🗺️</button>
+    <button data-k="KeyC" aria-label="Camera">🎥</button>
+    <button data-k="KeyR" aria-label="Reload or change radio station">📻</button>
+    <button data-k="KeyP" aria-label="Post a picture">📸</button>
+  </div>
+  <button id="fireBtn" data-hold="fire" aria-label="Shoot">🔫<small id="fireAmmo"></small></button>
+  <button id="swapBtn" data-k="KeyQ" aria-label="Switch weapon">🔄</button>
+</div>
+
+<div id="menu" class="overlay hidden"><div class="panel" id="panel"></div></div>
+<div id="bigmap" class="overlay hidden"><canvas id="bigmapCanvas"></canvas><div class="hint">M or Esc to close</div></div>
+
+<div id="title" class="overlay">
+  <div class="title-card">
+    <img src="assets/kimchi-hero.webp" alt="Kimchi" class="hero">
+    <div class="title-copy">
+      <div class="badge">THE LUXURY LIFE UPDATE</div>
+      <h1>KIMCHI<br><span>CITY</span></h1>
+      <p>A villa with an infinity pool, a garage of supercars, private jets and a city that knows your name. Post from the best spots, take on story missions, outrun the cops.</p>
+      <div class="btns">
+        <button id="continueBtn" class="primary hidden">Continue</button>
+        <button id="newBtn" class="primary">New game</button>
+      </div>
+      <div class="gfx" id="gfxSwitch">Graphics
+        <button data-gfx="auto">Auto</button><button data-gfx="high">High</button><button data-gfx="low">Low</button>
+      </div>
+      <ul class="controls">
+        <li><kbd>WASD</kbd> move / drive</li>
+        <li><kbd>Shift</kbd> run</li>
+        <li><kbd>E</kbd> enter · talk · get in</li>
+        <li><kbd>Space</kbd> jump · handbrake</li>
+        <li><kbd>Mouse</kbd> look · click to shoot</li>
+        <li><kbd>Right-click</kbd> aim · <kbd>1–4</kbd> weapons</li>
+        <li><kbd>R</kbd> reload · radio in cars</li>
+        <li><kbd>P</kbd> post a pic at 📸 spots</li>
+        <li><kbd>C</kbd> camera · <kbd>M</kbd> map</li>
+      </ul>
+      <div class="links"><a class="handle" href="https://x.com/kimchi1x" target="_blank" rel="noopener">@kimchi1x</a> · <a class="handle" id="mapLink" href="?map=1" title="The original grid town, kept for one release">classic map</a></div>
+    </div>
+  </div>
+</div>
+<div id="hurt"></div>
+<div id="flash"></div>
+<div id="bigtext" class="hidden"><b></b><small></small></div>
+<div id="fade"></div>
+
+<script type="module">
+  // On the classic map the title links back to Kimchi Key instead. src/world.js has already picked the map (from
+  // ?map=, the page's KC_WORLD or the saved kc-map; this is the same module main3d loads), and an explicit
+  // ?map=2 beats a saved choice, so the link always reaches the other map.
+  import { KIND } from './src/world.js';
+  const a = document.getElementById('mapLink');
+  if (a && KIND === 'grid') { a.href = '?map=2'; a.textContent = 'Kimchi Key map'; a.title = 'The new open-world map'; }
+</script>
+<script type="module" src="src/3d/main3d.js"></script>
+</body>
+</html>

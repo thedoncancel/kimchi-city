@@ -1,0 +1,18 @@
+# secrets and per-machine settings: never commit
+.env
+.env.*
+.vercel/
+.claude/
+
+# not part of this game, or too big / source material
+kumichi/
+node_modules/
+refs/
+pfp.png
+assets/kimchi-original.webp
+
+# generated
+tools/out/
+__pycache__/
+*.pyc
+.DS_Store

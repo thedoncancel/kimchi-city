@@ -1,0 +1,13 @@
+{
+  "note": "Grid (classic) map, after the S0 seams, before any v2 work. KC3.bench() in the Browser pane on the user's M1 (8 GB), 1440x800, Medium (pixel ratio 1.0, bloom, 2048 shadows), 15:30 sun. Reference street view for the old measurement method: 5.4 ms GPU at Medium.",
+  "size": [1440, 800],
+  "level": "Medium",
+  "views": [
+    {"view": "home", "calls": 245, "tris": 656295, "gpuMs": 8.21, "cpuMs": 3.7},
+    {"view": "park", "calls": 446, "tris": 1247694, "gpuMs": 10.09, "cpuMs": 4.1},
+    {"view": "motors", "calls": 534, "tris": 1150711, "gpuMs": 8.24, "cpuMs": 4.5},
+    {"view": "boutiques", "calls": 543, "tris": 1360589, "gpuMs": 8.12, "cpuMs": 4.3},
+    {"view": "marina", "calls": 353, "tris": 746469, "gpuMs": 8.25, "cpuMs": 3.6},
+    {"view": "jet", "calls": 410, "tris": 695418, "gpuMs": 8.1, "cpuMs": 3.8}
+  ]
+}

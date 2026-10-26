@@ -1,0 +1,10 @@
+# Upload only the game itself. Everything else in this folder stays on this computer,
+# including anything added later. To publish a new top-level file or folder, add a "!/name" line.
+/*
+!/index.html
+!/2d.html
+!/runner.html
+!/src
+!/vendor
+!/assets
+/assets/kimchi-original.webp

@@ -1,0 +1,14 @@
+{
+  "name": "kimchi-city",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Kimchi City - a mini open-world game starring @kimchi1x",
+  "scripts": {
+    "start": "python3 serve.py 5173",
+    "vendor": "mkdir -p vendor && cp node_modules/three/build/three.module.js vendor/three.module.js"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  }
+}
